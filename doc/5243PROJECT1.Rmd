@@ -1,5 +1,6 @@
 ---
 title: "An R Notebook Data Story on Happy Moments"
+author: "Zhengyang Xu, UNI:zx2229"
 output:
   html_document:
     df_print: paged
@@ -81,6 +82,8 @@ library(shiny)
 
 library(beeswarm)
 
+library(reshape2)
+
 setwd("E:/study/Columbia University/2018FALL/ads5243/project1/Fall2018-Proj1-ZhengyangXu")
 
 hm_data = read_csv('data/processed_moments.csv')
@@ -112,70 +115,6 @@ glimpse(hm_data)
 ggplot(hm_data)+
   geom_histogram(aes(x = num_words),fill = 'skyblue')+
   ggtitle(" number of words of happy moments' distribution")
-
-
-# sentence_list=NULL
-# for(i in 1:nrow(hm_data)){
-#   sentences=sent_detect(hm_data$cleaned_hm[i],
-#                         endmarks = c("?", ".", "!", "|",";"))
-#   if(length(sentences)>0){
-#     word.count=word_count(sentences)
-#     sentence_list=rbind(sentence_list, 
-#                         cbind(hm_data[i,],
-#                               sentences=as.character(sentences), 
-#                               word.count,
-#                               sent.id=1:length(sentences)
-#                               )
-#     )
-#   }
-# }
-# 
-# sentence_list=
-#   sentence_list%>%
-#   filter(!is.na(word.count)) 
-# 
-# ggplot(sentence_list)+
-#   geom_histogram(aes(x = word.count), fill = 'skyblue')+
-#   ggtitle(" length of sentences of happy moments' distribution")
-
-
-
-# if-tdf
-
-# words= hm_data %>%
-#   unnest_tokens(word, text) %>%
-#   count(word, sort = TRUE) 
-#  
-# 
-# total_words = words%>% 
-#   summarize(total = sum(n))
-# 
-# words = cbind(words,total = rep(total_words$total,nrow(words)))
-# 
-# ggplot(words, aes(n/total)) +
-#   geom_histogram(show.legend = FALSE) +
-#   xlim(NA, 0.0009) 
-#   
-# 
-#   words %>%
-#   mutate(word = factor(word, levels = rev(unique(word)))) %>% 
-#   top_n(15) %>% 
-#   ggplot(aes(word, n/total)) +
-#   geom_col(show.legend = FALSE) +
-#   labs(x = NULL, y = "tf-idf") +
-#   coord_flip()
-
-## What makes people happy
-  
-#  hm_corpus = VCorpus(VectorSource(hm_data$cleaned_hm))%>%
-#       tm_map(content_transformer(tolower))%>%
-#       tm_map(removePunctuation)%>%
-#       tm_map(removeNumbers)%>%
-#       tm_map(removeWords, character(0))%>%
-#       tm_map(stripWhitespace)%>%
-#       tm_map(removeWords, stopwords("english"))%>%
-#       tm_map(removeWords, limit_words)%>%
-#       tm_map(hm_corpus, stemDocument)
 
 hm_corpus = Corpus(VectorSource(hm_data$cleaned_hm))
 
@@ -263,23 +202,6 @@ div(plot_ly(type = "box") %>%
 ```
 
 The above plot is the number of words people used to describe their happy moments in different age stage. We can find that adult tend to use more words to descirbe their happy momens. This may because there are more adults sample in dataset. The average of words of people in different age stage descirbe their moments is a slightly different, older people tend to use more words.
-
-```{r,warning=FALSE,message=FALSE}
-
-# The average of words people use when they describe their happy moments
-
-
-# number of words in a sentence to describe happy moments
-
-# beeswarm(word.count~agestage, 
-#          data=sentence_list,
-#          horizontal = TRUE,
-#          pch=16, col=as.numeric(hm_data$agestage)+1, 
-#          cex=0.55, cex.axis=0.8, cex.lab=0.8,
-#          las=2, ylab="age stage", xlab="Length of sentence to describe happy moments",
-#          main="Happy Moments")
-# legend("topright",legend=levels(),fill=2:(length(levels(hm_data$agestage))+1),cex=1)
-```
 
 
 ```{r,warning=FALSE,message=FALSE}
@@ -694,6 +616,91 @@ wordcloud2(marriedhm,size = 0.5)
 From above, we can find that familys, freinds, work contributes a lot to females moments.
 
 From above analysis, we can find that happy moments between male and female is not much different. Friends and their spouses contributes a lot to their happy moments.
+
+### Topic Modeling 
+
+#### Build corpus
+
+```{r,include=FALSE,warning=FALSE,echo=FALSE}
+
+set.seed(5243)
+
+hm_data = hm_data[sample(1:nrow(hm_data), 5000),]
+
+corpus = VCorpus(VectorSource(hm_data$text))
+
+
+```
+
+### Model calculation
+
+```{r}
+DTM = DocumentTermMatrix(corpus)
+
+dim(DTM)
+
+rowTotals = apply(DTM , 1, sum)
+
+DTM  = DTM[rowTotals> 0, ]
+```
+
+
+```{r,include=FALSE,echo=FALSE,warning=FALSE}
+# Number of topics(according to predicted categories)
+
+k = 7
+
+topicModel = LDA(DTM, k, method="Gibbs", control=list(iter = 500, seed = 1234))
+
+terms(topicModel, 10)
+
+
+tmResult = posterior(topicModel)
+
+# format of the resulting object
+
+attributes(tmResult)
+
+# topics are probability distribtions over the entire vocabulary
+
+beta = tmResult$terms   # get beta from results
+ 
+
+theta = tmResult$topics 
+
+topicNames = c("friend", "job", "affection", "leisure", "achievement", "family", "trip")
+```
+
+In original dateset, we have predictory_category, which is a classfication of happy moments by author. Here I use 10 top words to rename these 7 topics as "friend", "job", "affection", leisure", "achievement", "family", "trip", "boding".
+
+#### Tests
+
+We select 3 examples to visualize topics.
+
+```{r}
+exampleIds = c(1,30, 120)
+
+lapply(corpus[exampleIds], as.character)
+```
+
+```{r}
+N = length(exampleIds)
+
+topicProportionExamples = theta[exampleIds,]
+
+colnames(topicProportionExamples) = topicNames
+
+vizDataFrame = melt(cbind(data.frame(topicProportionExamples), document = factor(1:N)), variable.name = "topic", id.vars = "document")  
+
+ggplot(data = vizDataFrame, aes(topic, value, fill = document), ylab = "proportion") + 
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  
+  coord_flip() +
+  facet_wrap(~ document, ncol = N)
+```
+
+Form the barchart, we can see the probability of each example in each topic. Longer bar implies higher possibility in that topic. The 1st example is classfied as job category, which is reasonable. The 2nd example is classfied as achievement, which is resonable, according to the text, it is related to academic preformance. The third example is a little hard to classify, and according to the text, it seems so.
+
 
 ### Summary
 

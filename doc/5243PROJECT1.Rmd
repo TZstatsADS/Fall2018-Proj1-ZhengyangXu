@@ -1,0 +1,709 @@
+---
+title: "An R Notebook Data Story on Happy Moments"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE,message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+![](E:/study/Columbia University/2018FALL/ads5243/project1/Fall2018-Proj1-ZhengyangXu/figs/title.jpeg)
+
+\newline
+\newline
+\newline
+
+Many things can make one's heart smile with joy. HappyDB is "a corpus of 100,000 crowd-sourced happy moments". In this project I will carry out an exploratory data analysis of the corpus of HappyDB and look deeper into the causes that make us happy.
+
+
+### Overall
+
+```{r,warning=FALSE,message=FALSE}
+
+library(readr)
+
+library(dplyr)
+
+library(tidytext) #text mining
+
+library(wordcloud2) #creative visualizations
+
+library(ggplot2)
+
+library(shiny)
+
+library(plotly)
+
+library("qdap")
+
+library("sentimentr")
+
+library("gplots")
+
+library("dplyr")
+
+library("tm")
+
+library("syuzhet")
+
+library("factoextra")
+
+library("beeswarm")
+
+library("scales")
+
+library("RColorBrewer")
+
+library("RANN")
+
+library("tm")
+
+library("topicmodels")
+
+library(tidyverse)
+
+library(tidytext)
+
+library(DT)
+
+library(scales)
+
+library(wordcloud2)
+
+library(gridExtra)
+
+library(ngram)
+
+library(shiny) 
+
+library(beeswarm)
+
+setwd("E:/study/Columbia University/2018FALL/ads5243/project1/Fall2018-Proj1-ZhengyangXu")
+
+hm_data = read_csv('data/processed_moments.csv')
+
+hm = hm_data
+
+demo_data = read_csv('data/demographic.csv')
+
+demo = demo_data
+
+hm_data = hm_data %>%
+  inner_join(demo_data, by = "wid") %>%
+  mutate(count = sapply(hm_data$text, wordcount),
+         num_words = sapply(hm_data$cleaned_hm,wordcount)) %>%
+         filter(reflection_period %in% c("24h", "3m")) %>%
+         filter(parenthood %in% c("n", "y")) %>%
+         filter(gender %in% c("m", "f")) %>%
+         mutate(reflection_period = fct_recode(reflection_period, 
+                                        months_3 = "3m", hours_24 = "24h"))
+
+ #filter(marital %in% c("single", "married")) %>%
+ 
+ ## the structure of the data 
+
+glimpse(hm_data)
+
+##  number of words of happy moments' distribution
+
+ggplot(hm_data)+
+  geom_histogram(aes(x = num_words),fill = 'skyblue')+
+  ggtitle(" number of words of happy moments' distribution")
+
+
+# sentence_list=NULL
+# for(i in 1:nrow(hm_data)){
+#   sentences=sent_detect(hm_data$cleaned_hm[i],
+#                         endmarks = c("?", ".", "!", "|",";"))
+#   if(length(sentences)>0){
+#     word.count=word_count(sentences)
+#     sentence_list=rbind(sentence_list, 
+#                         cbind(hm_data[i,],
+#                               sentences=as.character(sentences), 
+#                               word.count,
+#                               sent.id=1:length(sentences)
+#                               )
+#     )
+#   }
+# }
+# 
+# sentence_list=
+#   sentence_list%>%
+#   filter(!is.na(word.count)) 
+# 
+# ggplot(sentence_list)+
+#   geom_histogram(aes(x = word.count), fill = 'skyblue')+
+#   ggtitle(" length of sentences of happy moments' distribution")
+
+
+
+# if-tdf
+
+# words= hm_data %>%
+#   unnest_tokens(word, text) %>%
+#   count(word, sort = TRUE) 
+#  
+# 
+# total_words = words%>% 
+#   summarize(total = sum(n))
+# 
+# words = cbind(words,total = rep(total_words$total,nrow(words)))
+# 
+# ggplot(words, aes(n/total)) +
+#   geom_histogram(show.legend = FALSE) +
+#   xlim(NA, 0.0009) 
+#   
+# 
+#   words %>%
+#   mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+#   top_n(15) %>% 
+#   ggplot(aes(word, n/total)) +
+#   geom_col(show.legend = FALSE) +
+#   labs(x = NULL, y = "tf-idf") +
+#   coord_flip()
+
+## What makes people happy
+  
+#  hm_corpus = VCorpus(VectorSource(hm_data$cleaned_hm))%>%
+#       tm_map(content_transformer(tolower))%>%
+#       tm_map(removePunctuation)%>%
+#       tm_map(removeNumbers)%>%
+#       tm_map(removeWords, character(0))%>%
+#       tm_map(stripWhitespace)%>%
+#       tm_map(removeWords, stopwords("english"))%>%
+#       tm_map(removeWords, limit_words)%>%
+#       tm_map(hm_corpus, stemDocument)
+
+hm_corpus = Corpus(VectorSource(hm_data$cleaned_hm))
+
+hm_corpus = tm_map(hm_corpus, tolower)
+
+hm_corpus = tm_map(hm_corpus, removePunctuation)
+
+hm_corpus = tm_map(hm_corpus, removeNumbers)
+
+hm_corpus = tm_map(hm_corpus, stripWhitespace)
+
+hm_corpus = tm_map(hm_corpus, removeWords, stopwords("english"))
+
+limit_words = c("able", "ago", "getting", "will", "makes", "made",
+                "get", "one", "two", "three", "years", "lot", "today",
+                "back", "just", "year", "good", "weeks", "ive", "got",
+                "see", "day", "time", "hours", "things", "last", "came",
+                "didnt", "week", "happy", "also", "can", "yesterday",
+                "months", "since", "now", "month", "really", "great",
+                "found", "happiest","went","moment")
+
+hm_corpus = tm_map(hm_corpus, removeWords, limit_words)
+
+hm_corpus = tm_map(hm_corpus, stemDocument)
+
+dtm = DocumentTermMatrix(hm_corpus)
+
+tidy.dtm = tidy(dtm)
+
+tidy.dtm = summarise(group_by(tidy.dtm, term), sum(count))
+
+tidy.dtm = tidy.dtm[order(tidy.dtm$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(tidy.dtm)
+```
+
+From above, I analyze the frequency of words appear when peopel describe their happy moments. We can find that friend, family, family have higher frequency, which means peoples' happy moments happens more in coditions connetcted with them. For Next part, I am trying to divide people into differnt groups by some attributes, to explore what makes people happy specifically.
+
+
+### Different age stage
+
+In this part, I focus on analyzing people's happy moments in different age stage. According to the span of age, I try to divide people into 3 categories: teenager, adult and elder. 
+
+
+```{r,warning=FALSE,message=FALSE}
+
+## add age stage
+
+hm_data = hm_data %>%
+  mutate(agestage = 
+           ifelse(hm_data$age %in% 12:22, "Teenager", 
+           ifelse(hm_data$age %in% 23:59, "Adult", 
+           ifelse(hm_data$age %in% 60:100,"Elder","NA"))))
+
+hm_data$agestage = factor(hm_data$agestage)
+
+hm_data$agestage = factor(hm_data$agestage, levels = c('Teenager','Adult','Elder','NA'))
+
+# glimpse of age stage
+
+ggplot(hm_data[hm_data$agestage!='NA',], aes(x=agestage) )+
+  geom_bar(fill='skyblue')
+```
+
+A glimpse of age stage.
+
+```{r,warning=FALSE,message=FALSE}
+
+# total number of words used when differnt age people describe their happy moments
+
+div(plot_ly(type = "box") %>%
+  add_boxplot(y=hm_data$num_words[hm_data$agestage=='Teenager'],
+              marker = list(color = 'orange',alpha=0.5),
+              line = list(color = 'orange',alpha=0.5),
+              name='Teenager') %>%
+  add_boxplot(y=hm_data$num_words[hm_data$agestage=='Adult'],
+              marker = list(color = 'blue',alpha=0.5),
+              line = list(color = 'blue',alpha=0.5),
+              name='Adult') %>%
+  add_boxplot(y=hm_data$num_words[hm_data$agestage=='Elder'],
+              marker = list(color = 'green',alpha=0.5),
+              line = list(color = 'green',alpha=0.5),
+              name='Elder'),
+  align = 'center')
+```
+
+The above plot is the number of words people used to describe their happy moments in different age stage. We can find that adult tend to use more words to descirbe their happy momens. This may because there are more adults sample in dataset. The average of words of people in different age stage descirbe their moments is a slightly different, older people tend to use more words.
+
+```{r,warning=FALSE,message=FALSE}
+
+# The average of words people use when they describe their happy moments
+
+
+# number of words in a sentence to describe happy moments
+
+# beeswarm(word.count~agestage, 
+#          data=sentence_list,
+#          horizontal = TRUE,
+#          pch=16, col=as.numeric(hm_data$agestage)+1, 
+#          cex=0.55, cex.axis=0.8, cex.lab=0.8,
+#          las=2, ylab="age stage", xlab="Length of sentence to describe happy moments",
+#          main="Happy Moments")
+# legend("topright",legend=levels(),fill=2:(length(levels(hm_data$agestage))+1),cex=1)
+```
+
+
+```{r,warning=FALSE,message=FALSE}
+# check different happy moments proportition in different age stage
+
+ggplot(hm_data)+
+  geom_bar(aes(x=agestage,fill=predicted_category,color=predicted_category),stat = 'count', alpha=0.5)+
+  labs(y='Frequency',title="happy moments in different age stage")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The above plot is the proportion of different catogries 
+accounts for differnt age stage peoples' happy moments. We can find that the proportion is basically the same for people in different stage, achievement contributes a lot to peoples' happy moments.
+
+#### Analyzing word and document frequency: tf-idf
+
+```{r,warning=FALSE,message=FALSE}
+words.age = hm_data[hm_data$agestage != "NA",] %>%
+  unnest_tokens(word, text) %>%
+  count(agestage, word, sort = TRUE) %>%
+  ungroup()
+
+total_words_age = words.age %>% 
+  group_by(agestage) %>% 
+  summarize(total = sum(n))
+
+words.age = left_join(words.age, total_words_age, by="agestage")
+
+words.age = words.age %>%
+  bind_tf_idf(word, agestage, n)
+
+  words.age %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+  group_by(agestage) %>% 
+  top_n(15) %>% 
+  ungroup %>%
+  ggplot(aes(word, tf_idf, fill = agestage)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~agestage, ncol = 2, scales = "free") +
+  coord_flip()
+```
+
+The tf-idf plot. We can find the words are important but not too commont to reflect people in differnet ages stages happy moments.
+
+#### Teenager focus
+
+```{r,warning=FALSE,message=FALSE}
+
+teen_corpus = Corpus(VectorSource(hm_data[hm_data$agestage == "Teenager",]$cleaned_hm))
+
+teen_corpus = tm_map(teen_corpus, tolower)
+
+teen_corpus = tm_map(teen_corpus, removePunctuation)
+
+teen_corpus = tm_map(teen_corpus, removeNumbers)
+
+teen_corpus = tm_map(teen_corpus, stripWhitespace)
+
+teen_corpus = tm_map(teen_corpus, removeWords, stopwords("english"))
+
+teen_corpus = tm_map(teen_corpus, removeWords, limit_words)
+
+teen_corpus = tm_map(teen_corpus, stemDocument)
+
+dtm.teen = DocumentTermMatrix(teen_corpus)
+
+tidy.dtm.teen = tidy(dtm.teen)
+
+tidy.dtm.teen = summarise(group_by(tidy.dtm.teen, term), sum(count))
+
+tidy.dtm.teen = tidy.dtm.teen[order(tidy.dtm.teen$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(tidy.dtm.teen,size = 0.5)
+```
+
+Above plot is the word cloud plot of teenager's happy moments.
+We can find friend, playing are two top words. 
+Which means when teenager feels happy when they are with their friends and playing
+mostly in these situations.
+
+#### Adult focus
+
+```{r,warning=FALSE,message=FALSE}
+
+adult_corpus = Corpus(VectorSource(hm_data[hm_data$agestage == "Adult",]$cleaned_hm))
+
+adult_corpus = tm_map(adult_corpus, tolower)
+
+adult_corpus = tm_map(adult_corpus, removePunctuation)
+
+adult_corpus = tm_map(adult_corpus, removeNumbers)
+
+adult_corpus = tm_map(adult_corpus, stripWhitespace)
+
+adult_corpus = tm_map(adult_corpus, removeWords, stopwords("english"))
+
+adult_corpus = tm_map(adult_corpus, removeWords, limit_words)
+
+adult_corpus = tm_map(adult_corpus, stemDocument)
+
+dtm.adult = DocumentTermMatrix(adult_corpus)
+
+tidy.dtm.adult = tidy(dtm.adult)
+
+tidy.dtm.adult = summarise(group_by(tidy.dtm.adult, term), sum(count))
+
+tidy.dtm.adult = tidy.dtm.adult[order(tidy.dtm.adult$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(tidy.dtm.adult,size = 0.5)
+```
+
+Above is the word cloud plot of adults' happy moments. We can find friend and work are tow top words, which means adults usually feel happy when they are with their friends or at work.
+
+#### Elder focus
+
+```{r,warning=FALSE,message=FALSE}
+
+elder_corpus = Corpus(VectorSource(hm_data[hm_data$agestage == "Elder",]$cleaned_hm))
+
+elder_corpus = tm_map(elder_corpus, tolower)
+
+elder_corpus = tm_map(elder_corpus, removePunctuation)
+
+elder_corpus = tm_map(elder_corpus, removeNumbers)
+
+elder_corpus = tm_map(elder_corpus, stripWhitespace)
+
+elder_corpus = tm_map(elder_corpus, removeWords, stopwords("english"))
+
+elder_corpus = tm_map(elder_corpus, removeWords, limit_words)
+
+elder_corpus = tm_map(elder_corpus, stemDocument)
+ 
+dtm.elder = DocumentTermMatrix(elder_corpus)
+
+tidy.dtm.elder = tidy(dtm.elder)
+
+tidy.dtm.elder = summarise(group_by(tidy.dtm.elder, term), sum(count))
+
+tidy.dtm.elder = tidy.dtm.elder[order(tidy.dtm.elder$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(tidy.dtm.elder,size = 0.5)
+```
+
+The above plot is word cloud plot of elder peoples' happy moments. Here, we still find friend contributes a lot to their happy moments, but we also can find familys, such as wife, daughter, son appear a lot. 
+
+From above we can find that people in different age stage have different happy moments.
+
+For the order of number of words they used to describe their happy moments, the order of average of number of words of people in different age stage is: elder > adult > teenager, which I think is caused by different life experience. For older people, they have more life experience and go through more things, so when they descirbe their happy moments, they tend to use more words. For what causes happy for them, according to the word cloud plot, we can find friend is a very important cause of happy for all people. And for elder people, family contributes a lot to their happy moments. For teenager and adult, besides family, playing also contributes a lot to their happy moments.
+
+### Different Martial Status
+
+In this part, I am trying to find the difference of happy moments among people in different martial status. Here I just simply divide people's martial status into two catogories: married and single.
+
+```{r,warning=FALSE,message=FALSE}
+
+# divide marital status into two categories
+  
+  hm_data = hm_data %>%
+  mutate(marital.status = ifelse(hm_data$marital == "married", "married","single"))
+  
+  ggplot(hm_data)+
+  geom_bar(aes(x=marital.status,fill=predicted_category,color=predicted_category),alpha=0.5,stat='count')
+```
+  
+The above plot is the proportion of happy moments categories accout for people in different marital status' happy moments.
+Basically, they are the same.
+
+#### length of words when describe happy moments 
+
+```{r,warning=FALSE,message=FALSE} 
+  plot_ly(type = "box") %>%
+  add_boxplot(y=hm_data$num_words[hm_data$marital.status=='single'],
+              marker = list(color = 'orange',alpha=0.5),
+              line = list(color = 'orange',alpha=0.5),
+              name='single') %>%
+  add_boxplot(y=hm_data$num_words[hm_data$marital=='married'],
+              marker = list(color = 'blue',alpha=0.5),
+              line = list(color = 'blue',alpha=0.5),
+              name='married') 
+```
+
+The above plot is the number of words people used to describe their happy moments in different marital status. We can find that married people tend to use more words to descirbe their happy moments. 
+
+#### Analyzing word and document frequency: tf-idf
+
+```{r,warning=FALSE,message=FALSE}
+
+words.marital.status = hm_data[hm_data$marital.status != "o",] %>%
+  unnest_tokens(word, text) %>%
+  count(marital.status, word, sort = TRUE) %>%
+  ungroup()
+
+total_words_marital.status = words.marital.status %>% 
+  group_by(marital.status) %>% 
+  summarize(total = sum(n))
+
+words.marital.status = left_join(words.marital.status, total_words_marital.status, by="marital.status")
+
+
+words.marital.status = words.marital.status %>%
+  bind_tf_idf(word, marital.status, n)
+
+  words.marital.status %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+  group_by(marital.status) %>% 
+  top_n(15) %>% 
+  ungroup %>%
+  ggplot(aes(word, tf_idf, fill = marital.status)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~marital.status, ncol = 2, scales = "free") +
+  coord_flip()
+```
+
+The tf-idf plot. We can find the words are important but not too commont to reflect married or single people's happy moments.
+
+#### What makes people in different marital status happy.
+
+#### Married people.
+
+```{r,warning=FALSE,message=FALSE}
+
+married_corpus = Corpus(VectorSource(hm_data[hm_data$marital == "married",]$cleaned_hm))
+
+married_corpus = tm_map(married_corpus, tolower)
+
+married_corpus = tm_map(married_corpus, removePunctuation)
+
+married_corpus = tm_map(married_corpus, removeNumbers)
+
+married_corpus = tm_map(married_corpus, stripWhitespace)
+
+married_corpus = tm_map(married_corpus, removeWords, stopwords("english"))
+
+married_corpus = tm_map(married_corpus, removeWords, limit_words)
+
+dtm.married = DocumentTermMatrix(married_corpus)
+
+tidy.dtm.married = tidy(dtm.married)
+
+tidy.dtm.married = summarise(group_by(tidy.dtm.married, term), sum(count))
+
+marriedhm = tidy.dtm.married[order(tidy.dtm.married$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(marriedhm,size = 0.5)
+```
+
+From above word cloud plot, we can find married peoples happy moments focus on their family and familys.
+
+#### Single people.
+
+```{r,warning=FALSE,message=FALSE}
+
+single_corpus = Corpus(VectorSource(hm_data[hm_data$marital == "single",]$cleaned_hm))
+
+single_corpus = tm_map(single_corpus, tolower)
+
+single_corpus = tm_map(single_corpus, removePunctuation)
+
+single_corpus = tm_map(single_corpus, removeNumbers)
+
+single_corpus = tm_map(single_corpus, stripWhitespace)
+
+single_corpus = tm_map(single_corpus, removeWords, stopwords("english"))
+
+single_corpus = tm_map(single_corpus, removeWords, limit_words)
+
+dtm.single = DocumentTermMatrix(single_corpus)
+
+tidy.dtm.single = tidy(dtm.single)
+
+tidy.dtm.single = summarise(group_by(tidy.dtm.single, term), sum(count))
+
+singlehm = tidy.dtm.single[order(tidy.dtm.single$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(singlehm,size = 0.5)
+```
+
+From above, we can find that married people tend to use more words to describe their happy moments. Which is quiet understanble, since married people's life is more clolorful in some way than single people, since they have a family. And for what causes people happy, we can find that single peopele's happy moments focus on friends and work, however, for married people, their family and familys contribute a lot to their happy moments compared with single people.
+
+### Different gender
+
+In this part, I will try to find what makes men or women happy, and what the difference between them.
+
+```{r,warning=FALSE,message=FALSE}
+
+# glimpse of gender
+
+ggplot(hm_data)+
+  geom_bar(aes(x = gender,fill = predicted_category),stat="count")
+```
+
+The above plot is the proportion of happy moments categories accout for people in different gender happy moments. Basically, they are the same.
+
+```{r,warning=FALSE,message=FALSE}
+  
+# length of words when describe happy moments 
+  
+  plot_ly(type = "box") %>%
+  add_boxplot(y=hm_data$num_words[hm_data$gender=='f'],
+              marker = list(color = 'orange',alpha=0.5),
+              line = list(color = 'orange',alpha=0.5),
+              name='female') %>%
+  add_boxplot(y=hm_data$num_words[hm_data$gender=='m'],
+              marker = list(color = 'blue',alpha=0.5),
+              line = list(color = 'blue',alpha=0.5),
+              name='male') 
+```
+  
+We can find the number of words male and female used to describe their happy moments are basically the same, the average number of words of female is a little higher, which is understandable, since girls life is very colorful, and they have more feelings about their life.
+  
+#### Analyzing word and document frequency: tf-idf
+
+```{r,warning=FALSE,message=FALSE}
+
+words.gender = hm_data[hm_data$gender != "o",] %>%
+  unnest_tokens(word, text) %>%
+  count(gender, word, sort = TRUE) %>%
+  ungroup()
+
+total_words_gender = words.gender %>% 
+  group_by(gender) %>% 
+  summarize(total = sum(n))
+
+words.gender = left_join(words.gender, total_words_gender, by="gender")
+
+words.gender = words.gender %>%
+  bind_tf_idf(word, gender, n)
+
+  words.gender %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+  group_by(gender) %>% 
+  top_n(15) %>% 
+  ungroup %>%
+  ggplot(aes(word, tf_idf, fill = gender)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~gender, ncol = 2, scales = "free") +
+  coord_flip()
+```
+
+The tf-idf plot. We can find the words are important but not too commont to reflect men's and women's happy moments.
+
+#### what makes them happy
+  
+#### male
+
+```{r,warning=FALSE,message=FALSE}
+  
+male_corpus = Corpus(VectorSource(hm_data[hm_data$gender == "m",]$cleaned_hm))
+
+male_corpus = tm_map(male_corpus, tolower)
+
+male_corpus = tm_map(male_corpus, removePunctuation)
+
+male_corpus = tm_map(male_corpus, removeNumbers)
+
+male_corpus = tm_map(male_corpus, stripWhitespace)
+
+male_corpus = tm_map(male_corpus, removeWords, stopwords("english"))
+
+male_corpus = tm_map(male_corpus, removeWords, limit_words)
+
+dtm.m = DocumentTermMatrix(male_corpus)
+
+tidy.dtm.m = tidy(dtm.m)
+
+tidy.dtm.m = summarise(group_by(tidy.dtm.m, term), sum(count))
+
+malehm = tidy.dtm.m[order(tidy.dtm.m$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(malehm,size = 0.5)
+```
+
+From above word cloud plot, we can find work, friend and girl friend, wife contributes a lot to males' happy moments.
+
+### female
+
+```{r,warning=FALSE,message=FALSE}
+
+female_corpus = Corpus(VectorSource(hm_data[hm_data$gender == "f",]$cleaned_hm))
+
+female_corpus = tm_map(female_corpus, tolower)
+
+female_corpus = tm_map(female_corpus, removePunctuation)
+
+female_corpus = tm_map(female_corpus, removeNumbers)
+
+female_corpus = tm_map(female_corpus, stripWhitespace)
+
+female_corpus = tm_map(female_corpus, removeWords, stopwords("english"))
+
+female_corpus = tm_map(female_corpus, removeWords, limit_words)
+
+dtm.f = DocumentTermMatrix(female_corpus)
+
+tidy.dtm.f = tidy(dtm.f)
+
+tidy.dtm.f = summarise(group_by(tidy.dtm.f, term), sum(count))
+
+femalehm = tidy.dtm.f[order(tidy.dtm.f$`sum(count)`,decreasing = TRUE),]
+
+wordcloud2(marriedhm,size = 0.5)
+
+```
+
+From above, we can find that familys, freinds, work contributes a lot to females moments.
+
+From above analysis, we can find that happy moments between male and female is not much different. Friends and their spouses contributes a lot to their happy moments.
+
+### Summary
+
+By analyzing the happy moments in the HappyDB dataset, we could get the following results.
+
+
++ When people get older, they have more life experience, so they feel more about their happy moments. Whic is reflected older people tend to use more words to describe their happy moments.
+
++ For all of us, friends and work contribute a lot to our happy moments. Specifically, family and familys contribute more to older people's and female's happy moments.
+
+
++ The idea of tf-idf is to find the important words for the content of each document by decreasing the weight for commonly used words and increasing the weight for words that are not used very much in a collection or corpus of documents, in this case, people's happy moments as a whole. Calculating tf-idf attempts to find the words that are important (i.e., common) in a text, but not too common. And the result has been shown in above plots.
+

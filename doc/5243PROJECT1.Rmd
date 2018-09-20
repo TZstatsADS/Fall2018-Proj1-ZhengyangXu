@@ -422,6 +422,46 @@ words.marital.status = words.marital.status %>%
 
 The tf-idf plot. We can find the words are important but not too commont to reflect married or single people's happy moments.
 
+#### Word Usage
+
+```{r,warning=FALSE,message=FALSE}
+
+tidy_hm = hm_data%>%
+  unnest_tokens(word,text)
+
+frequency = tidy_hm %>% 
+  group_by(marital.status) %>% 
+  count(word, sort = TRUE) %>% 
+  left_join(tidy_hm %>% 
+              group_by(marital.status) %>% 
+              summarise(total = n())) %>%
+  mutate(freq = n/total)
+
+word_ratios = tidy_hm %>%
+  count(word, marital.status) %>%
+  group_by(marital.status) %>%
+  filter(sum(n) >= 10) %>%
+  ungroup() %>%
+  spread(marital.status, n, fill = 0) %>%
+  mutate_if(is.numeric, funs((. + 1) / (sum(.) + 1))) %>%
+  mutate(logratio = log(married / single)) %>%
+  arrange(desc(logratio))
+
+word_ratios %>%
+  group_by(logratio < 0) %>%
+  top_n(15, abs(logratio)) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, logratio)) %>%
+  ggplot(aes(word, logratio, fill = logratio < 0)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  ylab("log odds ratio (married/single)") +
+  scale_fill_discrete(name = "", labels = c("married", "single"))
+
+```
+
+From above, we can find which words are more or less likely to come from married or single people using the log odds ratio. 
+
 #### What makes people in different marital status happy.
 
 #### Married people.
@@ -549,6 +589,41 @@ words.gender = words.gender %>%
 ```
 
 The tf-idf plot. We can find the words are important but not too commont to reflect men's and women's happy moments.
+
+#### word usage
+
+```{r}
+frequency = tidy_hm %>% 
+  group_by(gender) %>% 
+  count(word, sort = TRUE) %>% 
+  left_join(tidy_hm %>% 
+              group_by(gender) %>% 
+              summarise(total = n())) %>%
+  mutate(freq = n/total)
+
+word_ratios = tidy_hm %>%
+  count(word, gender) %>%
+  group_by(gender) %>%
+  filter(sum(n) >= 10) %>%
+  ungroup() %>%
+  spread(gender, n, fill = 0) %>%
+  mutate_if(is.numeric, funs((. + 1) / (sum(.) + 1))) %>%
+  mutate(logratio = log(m / f)) %>%
+  arrange(desc(logratio))
+
+word_ratios %>%
+  group_by(logratio < 0) %>%
+  top_n(15, abs(logratio)) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, logratio)) %>%
+  ggplot(aes(word, logratio, fill = logratio < 0)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  ylab("log odds ratio (male/female)") +
+  scale_fill_discrete(name = "", labels = c("male", "female"))
+```
+
+From above, we can find words are more likely to be from male or female. It is reasonable in some way, like husband, boyfriend are more likely to be from female. But for male, their words seems that they do not have much tendency.
 
 #### what makes them happy
   
@@ -684,6 +759,7 @@ lapply(corpus[exampleIds], as.character)
 ```
 
 ```{r}
+
 N = length(exampleIds)
 
 topicProportionExamples = theta[exampleIds,]
